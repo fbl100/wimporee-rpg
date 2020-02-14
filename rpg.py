@@ -2,174 +2,252 @@ import sys
 import time
 import random
 
-TEXT_DELAY = 0.01  # seconds
+from console_functions import print_slowly
 
-CURRENT_ROOM = 'entry_hall'
+CURRENT_ROOM = 'outside'
 
 #########################
 # player data structure #
 #########################
 player = {
     'name': '',
-    'row': 0,
-    'col': 0,
-    'won': False,
     'hp': 10,
-    'victories': 0
+    'inventory': [],
+    'damage': 0,
+    'shield': 0
+}
+
+items = {
+    'helmet': {
+        'description': "Safety First!",
+        'modifiers': {
+            'shield': 5
+        }
+    },
+    'axe': {
+        'description': "This axe looks like it might be useful",
+        'modifiers': {
+            'damage': 5
+        }
+    },
+    'lamp': {
+        'description': "This isn't the type of lamp that Alladin found...",
+        'modifiers': {}
+    },
+    'healing potion': {
+        'description': "Restores 5 hp of health",
+        'modifiers': {
+            'hp': 5
+        }
+    }
+
 }
 
 enemies = {
-    'jello_cube': {
-        'description_text': 'A cube of jello stands before you... jiggling',
-        'attack_text': 'The jello jiggles at you... and jiggles',
-        'flee_text': 'The jello quietly oozes away, never to be seen again',
-        "kill_text": "You vanquish the jello, aren't you proud of yourself?",
-        'damage': 0,
-        'critical_damage': 0,
-        'hp': 1,
-    }
-}
-
-map = {
-    'entry_hall': {
-        'description': "You are standing in the entry hall",
-        'info': "You can go into the parlor, the library, or upstairs",
-        'actions': {
-            'parlor': 'parlor',
-            'library': 'library',
-            'upstairs': 'upstairs',
-        },
-        'encounter_probability': 0.0
-    },
-    'parlor': {
-        'description': "Hey look, it's a parlor",
-        'info': "You can go into the entry hall or the kitchen",
-        'actions': {
-            'entry hall': 'entry_hall',
-            'kitchen': 'kitchen'
-        },
-        'encounter_probability': 0.0
-    },
-    'library': {
-        'description': "You're in the library, and it smells like books",
-        'info': "nothing to see here",
-        'actions': {
-            'parlor': 'parlor',
-            'library': 'library',
-            'upstairs': 'upstairs',
-        },
-        'encounter_probability': 0.0
-    },
-    'upstairs': {
-        'description': "Upstairs is nice.. you kinda wish you were downstairs though",
-        'info': "There is a rug in the middle of the floor",
-        'actions': {
-            'downstairs': 'entry_hall'
-        },
-        'encounter_probability': 0.0
-    },
-    'kitchen': {
-        'description': "you are in the kitchen",
-        'info': "you can go back to the parlor from here",
-        'actions': {
-            'parlor': 'parlor'
-        },
-        'encounter_probability': 1.0
+    'gnome': {
+        'description_text': 'an angry gnome',
+        'attack_text': 'the gnome whacks your kneecaps',
+        'damage': 5,
+        'hp': 10,
     }
 
 }
+
+world = {
+    'outside': {
+        'description': "You are standing outside what appears to be an abandoned gold mine",
+        'items': ['helmet'],
+        'enemies': [],
+        'exits': {
+            'inside': {
+                'require': ['helmet'],
+            }
+        }
+    },
+    'inside': {
+        'description': "You are standing in the entrance to the mine",
+        'items': ['axe', 'lamp'],
+        'enemies': [],
+        'exits': {
+            'outside': {
+                'require': [],
+            },
+            'into the darkness': {
+                'require': ['lamp']
+            }
+        }
+    },
+    'into the darkness': {
+        'description': "You are standing the darkness..",
+        'items': [],
+        'enemies': ['gnome'],
+        'exits': {
+            'inside': {
+                'require': [],
+            }
+        }
+    }
+}
+
 
 # this function will print text slowly, with a delay of 0.05 seconds
-def print_slowly(text):
-    for character in text:
-        # This will occur throughout the intro code.  It allows the string to be typed gradually - like a typerwriter
-        # effect.
-        sys.stdout.write(character)
-        sys.stdout.flush()
-        time.sleep(TEXT_DELAY)
-    sys.stdout.write('\n')
-    sys.stdout.flush()
 
 
 def setup_game():
     print_slowly("Hello there, what is your name?")
     player['name'] = input("> ")
-    print_slowly("Hi " + player['name'] + ", how are you feeling today?")
-    player['mood'] = input("> ")
 
-def encounter():
-    enemy = enemies['jello_cube'].copy()
-    print_slowly("An Encounter!")
-    print_slowly(enemy['description_text'])
-    encounter_over = False
-    while encounter_over is False:
-        # player goes first
-        print_slowly("Actions: attack, run")
-        player_move = input("> ")
-        if player_move == "attack":
-            if random.uniform(0,1) > 0.5:
-                enemy['hp'] -= 1
-                print_slowly("Hit!  Enemy now has " + str(enemy['hp']) + " hp")
-            else:
-                print_slowly("you missed")
-        if player_move == "run":
-            print_slowly("coward")
-            encounter_over = True
-            map[CURRENT_ROOM]['encounter_probability'] = 0.0
-
-        if enemy['hp'] <= 0:
-            print_slowly(enemy['kill_text'])
-            encounter_over = True
-            map[CURRENT_ROOM]['encounter_probability'] = 0.0
-        else:
-            # monster moves
-            if random.uniform(0,1) > 0.05:
-                print_slowly(enemy['attack_text'])
-                player['hp'] -= 1
-            else:
-                print_slowly(enemy['flee_text'])
 
 def process_go(arg):
-    print("going " + arg)
+    global CURRENT_ROOM
+    if arg in world[CURRENT_ROOM]['exits']:
+        next_room = world[CURRENT_ROOM]['exits'][arg]
+
+        for required_item in next_room['require']:
+            if required_item not in player['inventory']:
+                print("You do not have a " + required_item)
+                return
+
+        CURRENT_ROOM = arg
+    else:
+        print("that isn't really an option")
+
+
+def pickup_item(item):
+    if item in world[CURRENT_ROOM]['items']:
+        player['inventory'].append(item)
+        world[CURRENT_ROOM]['items'].remove(item)
+
+        for stat in items[item]['modifiers'].keys():
+            increment = items[item]['modifiers'][stat]
+            player[stat] += increment
+
+    else:
+        print("I don't see a " + item)
+
+
+def drop_item(item):
+    if item in player['inventory']:
+        player['inventory'].remove(item)
+        world[CURRENT_ROOM]['items'].append(item)
+
+        for stat in items[item]['modifiers'].keys():
+            increment = items[item]['modifiers'][stat]
+            player[stat] -= increment
+
+    else:
+        print("you don't have a " + item)
+
 
 def process_look(arg):
-    print("looking at " + arg)
+    if arg is None:
+        # list the item descriptions
+        print("what do you want to look at?")
+    elif arg not in items:
+        print("I don't see one of those")
+    else:
+        item = items[arg]
+        print(item['description'])
 
-def process_combat(arg):
-    print("combat")
+
+def print_player(args):
+    print("###############################")
+    print("# Player : " + player['name'])
+    print("# HP     : " + str(player['hp']))
+    print("# Damage : " + str(player['damage']))
+    print("# Shield : " + str(player['shield']))
+    print("# Inventory ")
+    for item in player['inventory']:
+        print("#   " + item)
+    print("###############################")
 
 
 command_dispatch = {
-    'go' : process_go,
-    'look' : process_look
+    # syntax: go [exit]
+    'go': process_go,
+    # syntax: look
+    'look': process_look,
+    'stats': print_player,
+    'pickup': pickup_item,
+    'drop': drop_item
 }
 
-def prompt():
+
+def print_situation():
+    print(world[CURRENT_ROOM]['description'])
+    print("")
+    print("You see:")
+    for item in world[CURRENT_ROOM]['items']:
+        print("    " + item)
+
+    exits = list(world[CURRENT_ROOM]['exits'].keys())
+
+    print("exits: " + ", ".join(exits))
+
+
+def do_combat():
     global CURRENT_ROOM
-    rand = random.uniform(0.0,1.0)
-    if map[CURRENT_ROOM]['encounter_probability'] > rand:
-        encounter()
-    print_slowly(map[CURRENT_ROOM]['description'])
-    user_input = input("> ")
-    tokens = user_input.split(' ', 1)
-    action = tokens[0]
+    print("An Encounter!")
 
-    if tokens[0] in command_dispatch:
-        command_dispatch[tokens[0]](tokens[1])
+    for enemy_type in world[CURRENT_ROOM]['enemies']:
+        print("You must do battle with a " + enemy_type + "!!!")
+        enemy = enemies[enemy_type].copy()
 
-    if user_input == "look":
-        print_slowly(map[CURRENT_ROOM]['info'])
-    elif user_input in map[CURRENT_ROOM]['actions']:
-        CURRENT_ROOM = map[CURRENT_ROOM]['actions'][user_input]
+        while enemy['hp'] > 0 and player['hp'] > 0:
+            command = input("[attack|run] > ")
+            if command == 'attack':
+                damage = player['damage']
+                print("you attack the {} dealing {} damage".format(enemy_type, damage))
+                enemy['hp'] -= damage
+            elif command == 'run':
+                print("you make a run for it!")
+                exit = list(world[CURRENT_ROOM]['exits'].keys())[0]
+                CURRENT_ROOM = exit
+                return
+
+            if enemy['hp'] > 0:
+                # monster attacks
+                enemy_damage = enemy['damage']
+                print("{} dealing {} damage".format(enemy['attack_text'], enemy_damage))
+                player['hp'] -= enemy_damage
+
+            print("{} has {} hp".format(player['name'], player['hp']))
+            print("{} has {} hp".format(enemy_type, enemy['hp']))
+
+        if player['hp'] <= 0:
+            print("you died")
+        elif enemy['hp'] <= 0:
+            print("you killed the {}".format(enemy_type))
+            # maybe give the player some gold?
+            world[CURRENT_ROOM]['enemies'].remove(enemy_type)
+
+        print()
+
+
+def prompt():
+    if len(world[CURRENT_ROOM]['enemies']) > 0:
+        # combat!
+        do_combat()
+        if player['hp'] <= 0:
+            return
+
+    print_situation()
+    user_input = input("{} > ".format(", ".join(list(command_dispatch.keys()))))
+    # split the first word out, that is our action
+    tokens = user_input.split(' ', 1)  # the 1 splits only the first instance of ' '
+    command = tokens[0]
+    if command not in command_dispatch:
+        print("unknown command")
     else:
-        print_slowly("I'm sorry, I don't know what you want to to...")
+        arguments = None
+        if len(tokens) > 1:
+            arguments = tokens[1]
+        command_dispatch[command]((arguments))
 
-    for room in map.keys():
-        map[room]['encounter_probability'] += 0.10
 
 def game_loop():
-    while player['won'] is False:
-        CURRENT_ROOM = prompt()
+    while player['hp'] > 0:
+        prompt()
 
 
 setup_game()
