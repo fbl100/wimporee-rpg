@@ -2,9 +2,36 @@ import sys
 import time
 import random
 
-from console_functions import print_slowly
+import os
+import sys
+import time
 
-CURRENT_ROOM = 'outside'
+###################
+# Useful Functions
+###################
+
+
+TEXT_DELAY = 0.03  # seconds
+# This function will print text slowly, with a TEXT_DELAY (in seconds) delay between characters
+# it mimics a typewriter effect, and adds a nice narrative effect to the game
+def print_slowly(text):
+    # for each character in the text
+    for character in text:
+        # write the caracter and flush() stdout to make sure it actually prints to the screen
+        sys.stdout.write(character)
+        sys.stdout.flush()
+        # then wait TEXT_DELAY seconds
+        time.sleep(TEXT_DELAY)
+
+    # when finished, write a newline character (and flush)
+    sys.stdout.write('\n')
+    sys.stdout.flush()
+
+# Clears the screen.  In Python is matters if you're running on Windows vs Mac (or Linux)
+# which is why you check the os.name ('nt' is Windows)
+def cls():
+    os.system(('cls' if os.name == 'nt' else 'clear'))
+
 
 #########################
 # player data structure #
@@ -40,7 +67,6 @@ items = {
             'hp': 5
         }
     }
-
 }
 
 enemies = {
@@ -89,10 +115,11 @@ world = {
     }
 }
 
+##### GAME STATE VARIABLES #####
+CURRENT_ROOM = 'outside'
+##### GAME STATE VARIABLES #####
 
-# this function will print text slowly, with a delay of 0.05 seconds
-
-
+#
 def setup_game():
     print_slowly("Hello there, what is your name?")
     player['name'] = input("> ")
@@ -105,12 +132,12 @@ def process_go(arg):
 
         for required_item in next_room['require']:
             if required_item not in player['inventory']:
-                print("You do not have a " + required_item)
+                print_slowly("You do not have a " + required_item)
                 return
 
         CURRENT_ROOM = arg
     else:
-        print("that isn't really an option")
+        print_slowly("that isn't really an option")
 
 
 def pickup_item(item):
@@ -123,7 +150,7 @@ def pickup_item(item):
             player[stat] += increment
 
     else:
-        print("I don't see a " + item)
+        print_slowly("I don't see a " + item)
 
 
 def drop_item(item):
@@ -136,18 +163,18 @@ def drop_item(item):
             player[stat] -= increment
 
     else:
-        print("you don't have a " + item)
+        print_slowly("you don't have a " + item)
 
 
 def process_look(arg):
     if arg is None:
         # list the item descriptions
-        print("what do you want to look at?")
+        print_slowly("what do you want to look at?")
     elif arg not in items:
-        print("I don't see one of those")
+        print_slowly("I don't see one of those")
     else:
         item = items[arg]
-        print(item['description'])
+        print_slowly(item['description'])
 
 
 def print_player(args):
@@ -161,6 +188,9 @@ def print_player(args):
         print("#   " + item)
     print("###############################")
 
+def command_quit(arg):
+    print_slowly("Abandon ye all hope, for you have quit...")
+    exit(0)
 
 command_dispatch = {
     # syntax: go [exit]
@@ -169,20 +199,22 @@ command_dispatch = {
     'look': process_look,
     'stats': print_player,
     'pickup': pickup_item,
-    'drop': drop_item
+    'drop': drop_item,
+    'quit': command_quit
 }
 
 
 def print_situation():
-    print(world[CURRENT_ROOM]['description'])
+    print("######################################")
+    print_slowly(world[CURRENT_ROOM]['description'])
     print("")
-    print("You see:")
+    print_slowly("You see:")
     for item in world[CURRENT_ROOM]['items']:
-        print("    " + item)
+        print_slowly("    " + item)
 
     exits = list(world[CURRENT_ROOM]['exits'].keys())
 
-    print("exits: " + ", ".join(exits))
+    print_slowly("exits: " + ", ".join(exits))
 
 
 def do_combat():
