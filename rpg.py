@@ -1,88 +1,21 @@
-import sys
-import time
-import random
-
-import os
-import sys
-import time
-
-###################
-# Useful Functions
-###################
-
-
-TEXT_DELAY = 0.03  # seconds
-# This function will print text slowly, with a TEXT_DELAY (in seconds) delay between characters
-# it mimics a typewriter effect, and adds a nice narrative effect to the game
-def print_slowly(text):
-    # for each character in the text
-    for character in text:
-        # write the caracter and flush() stdout to make sure it actually prints to the screen
-        sys.stdout.write(character)
-        sys.stdout.flush()
-        # then wait TEXT_DELAY seconds
-        time.sleep(TEXT_DELAY)
-
-    # when finished, write a newline character (and flush)
-    sys.stdout.write('\n')
-    sys.stdout.flush()
-
-# Clears the screen.  In Python is matters if you're running on Windows vs Mac (or Linux)
-# which is why you check the os.name ('nt' is Windows)
-def cls():
-    os.system(('cls' if os.name == 'nt' else 'clear'))
-
-
 #########################
 # player data structure #
 #########################
-player = {
-    'name': '',
-    'hp': 10,
-    'inventory': [],
-    'damage': 0,
-    'shield': 0
-}
+import random
 
-items = {
-    'helmet': {
-        'description': "Safety First!",
-        'modifiers': {
-            'shield': 5
-        }
-    },
-    'axe': {
-        'description': "This axe looks like it might be useful",
-        'modifiers': {
-            'damage': 5
-        }
-    },
-    'lamp': {
-        'description': "This isn't the type of lamp that Alladin found...",
-        'modifiers': {}
-    },
-    'healing potion': {
-        'description': "Restores 5 hp of health",
-        'modifiers': {
-            'hp': 5
-        }
-    }
-}
+from items import items_list
+from combat import process_combat, process_attack
+from console import print_slowly, parse_command
+from enemies import create_enemy
+from player import create_player, print_player
 
-enemies = {
-    'gnome': {
-        'description_text': 'an angry gnome',
-        'attack_text': 'the gnome whacks your kneecaps',
-        'damage': 5,
-        'hp': 10,
-    }
-
-}
 
 world = {
     'outside': {
         'description': "You are standing outside what appears to be an abandoned gold mine",
         'items': ['helmet'],
+        'possible_enemies' : [],
+        # list of actual enemies in the room
         'enemies': [],
         'exits': {
             'inside': {
@@ -93,6 +26,12 @@ world = {
     'inside': {
         'description': "You are standing in the entrance to the mine",
         'items': ['axe', 'lamp'],
+        # list of possible enemies
+        'possible_enemies' : [{
+            'type': 'gnome',
+            'spawn_chance': 50
+        }],
+        # list of actual enemies in the room
         'enemies': [],
         'exits': {
             'outside': {
@@ -104,9 +43,14 @@ world = {
         }
     },
     'into the darkness': {
-        'description': "You are standing the darkness..",
+        'description': "You are standing in the darkness..",
         'items': [],
-        'enemies': ['gnome'],
+        'possible_enemies' : [{
+            'type': 'dragon',
+            'spawn_chance': 100
+        }],
+        # list of actual enemies in the room
+        'enemies': [],
         'exits': {
             'inside': {
                 'require': [],
@@ -117,89 +61,80 @@ world = {
 
 ##### GAME STATE VARIABLES #####
 CURRENT_ROOM = 'outside'
+player = create_player('Frank', 'fighter')
+
+
 ##### GAME STATE VARIABLES #####
 
-#
-def setup_game():
-    print_slowly("Hello there, what is your name?")
-    player['name'] = input("> ")
-
-
-def process_go(arg):
+def command_go(to_room):
     global CURRENT_ROOM
-    if arg in world[CURRENT_ROOM]['exits']:
-        next_room = world[CURRENT_ROOM]['exits'][arg]
-
+    # is the destination room in the list of exists?
+    if to_room in world[CURRENT_ROOM]['exits']:
+        next_room = world[CURRENT_ROOM]['exits'][to_room]
+        # check to make sure that we have any required items to use this exit
         for required_item in next_room['require']:
             if required_item not in player['inventory']:
                 print_slowly("You do not have a " + required_item)
                 return
 
-        CURRENT_ROOM = arg
+
+        if len(world[to_room]['enemies']) == 0:
+            # there are no enemies in the room
+            # spawn some
+            for enemy_type in world[to_room]['possible_enemies']:
+                if random.randint(0,100) < enemy_type['spawn_chance']:
+                    print('spawned {}'.format(enemy_type['type']))
+                    world[to_room]['enemies'].append( create_enemy(enemy_type['type']))
+
+        CURRENT_ROOM = to_room
     else:
         print_slowly("that isn't really an option")
 
+def give_item(item):
+    player['inventory'][item] = items_list[item].copy()
 
-def pickup_item(item):
+def command_pickup(item):
     if item in world[CURRENT_ROOM]['items']:
-        player['inventory'].append(item)
+        give_item(item)
         world[CURRENT_ROOM]['items'].remove(item)
-
-        for stat in items[item]['modifiers'].keys():
-            increment = items[item]['modifiers'][stat]
-            player[stat] += increment
-
     else:
         print_slowly("I don't see a " + item)
 
 
-def drop_item(item):
-    if item in player['inventory']:
-        player['inventory'].remove(item)
-        world[CURRENT_ROOM]['items'].append(item)
-
-        for stat in items[item]['modifiers'].keys():
-            increment = items[item]['modifiers'][stat]
-            player[stat] -= increment
-
+def command_drop(item_name):
+    if item_name in player['inventory']:
+        player['inventory'].remove(item_name)
+        world[CURRENT_ROOM]['items'].append(item_name)
     else:
-        print_slowly("you don't have a " + item)
+        print_slowly("you don't have a " + item_name)
 
 
-def process_look(arg):
+def command_look(arg):
     if arg is None:
         # list the item descriptions
         print_slowly("what do you want to look at?")
-    elif arg not in items:
+    elif arg not in world[CURRENT_ROOM]['items']:
         print_slowly("I don't see one of those")
     else:
-        item = items[arg]
+        item = items_list[arg]
         print_slowly(item['description'])
 
 
-def print_player(args):
-    print("###############################")
-    print("# Player : " + player['name'])
-    print("# HP     : " + str(player['hp']))
-    print("# Damage : " + str(player['damage']))
-    print("# Shield : " + str(player['shield']))
-    print("# Inventory ")
-    for item in player['inventory']:
-        print("#   " + item)
-    print("###############################")
+def command_stats(args):
+    print_player(player)
+
 
 def command_quit(arg):
     print_slowly("Abandon ye all hope, for you have quit...")
     exit(0)
 
+
 command_dispatch = {
-    # syntax: go [exit]
-    'go': process_go,
-    # syntax: look
-    'look': process_look,
-    'stats': print_player,
-    'pickup': pickup_item,
-    'drop': drop_item,
+    'go': command_go,
+    'look': command_look,
+    'stats': command_stats,
+    'pickup': command_pickup,
+    'drop': command_drop,
     'quit': command_quit
 }
 
@@ -219,41 +154,22 @@ def print_situation():
 
 def do_combat():
     global CURRENT_ROOM
-    print("An Encounter!")
-
-    for enemy_type in world[CURRENT_ROOM]['enemies']:
-        print("You must do battle with a " + enemy_type + "!!!")
-        enemy = enemies[enemy_type].copy()
-
-        while enemy['hp'] > 0 and player['hp'] > 0:
-            command = input("[attack|run] > ")
-            if command == 'attack':
-                damage = player['damage']
-                print("you attack the {} dealing {} damage".format(enemy_type, damage))
-                enemy['hp'] -= damage
-            elif command == 'run':
-                print("you make a run for it!")
-                exit = list(world[CURRENT_ROOM]['exits'].keys())[0]
-                CURRENT_ROOM = exit
-                return
-
-            if enemy['hp'] > 0:
-                # monster attacks
-                enemy_damage = enemy['damage']
-                print("{} dealing {} damage".format(enemy['attack_text'], enemy_damage))
-                player['hp'] -= enemy_damage
-
-            print("{} has {} hp".format(player['name'], player['hp']))
-            print("{} has {} hp".format(enemy_type, enemy['hp']))
-
+    room_enemies = world[CURRENT_ROOM]['enemies']
+    combat_result = process_combat(player, room_enemies[0])
+    if combat_result == 'run':
+        next_room = list(world[CURRENT_ROOM]['exits'].keys())[0]
+        CURRENT_ROOM = next_room
+    elif combat_result == 'complete':
+        # combat is complete
         if player['hp'] <= 0:
-            print("you died")
-        elif enemy['hp'] <= 0:
-            print("you killed the {}".format(enemy_type))
-            # maybe give the player some gold?
-            world[CURRENT_ROOM]['enemies'].remove(enemy_type)
+            return
+        if room_enemies[0]['hp'] <= 0:
+            room_enemies.clear()
 
-        print()
+def process_user_input(user_input):
+    # split the first word out, that is our action
+    (command, arguments) = parse_command(user_input)
+    command_dispatch[command]((arguments))
 
 
 def prompt():
@@ -265,22 +181,30 @@ def prompt():
 
     print_situation()
     user_input = input("{} > ".format(", ".join(list(command_dispatch.keys()))))
-    # split the first word out, that is our action
-    tokens = user_input.split(' ', 1)  # the 1 splits only the first instance of ' '
-    command = tokens[0]
-    if command not in command_dispatch:
-        print("unknown command")
-    else:
-        arguments = None
-        if len(tokens) > 1:
-            arguments = tokens[1]
-        command_dispatch[command]((arguments))
+
+    process_user_input(user_input)
 
 
 def game_loop():
+
     while player['hp'] > 0:
         prompt()
+        if len(world[CURRENT_ROOM]['enemies']) > 0:
+            do_combat()
 
+#test
+player = create_player()
+# give_item('helmet')
+# give_item('axe')
+# enemy = create_enemy('gnome')
+#
+# process_attack(player, enemy)
 
-setup_game()
 game_loop()
+#
+# player = create_player('Frank', 'fighter')
+# enemy = create_enemy('gnome')
+# process_combat(player, [enemy])
+# # CURRENT_ROOM = 'outside'
+#
+# game_loop()
